@@ -1,0 +1,412 @@
+---
+title: "Cyclistic's Bike-share Study"
+author: "Ikechukwu Onuko"
+date: "2023-03-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE)
+```
+
+
+
+### Scenario
+
+Cyclistic is a bike-sharing program in Chicago that began in 2016 with a fleet of 5,824 bikes and 692 geo-tracked stations. Their marketing strategy has focused on general awareness and pricing plans that cater to different consumer segments. 
+
+However, the finance analysts have concluded that annual members are more profitable than casual riders. To maximize future growth, the marketing team aims to convert casual riders into annual members through targeted campaigns. To achieve this, the team needs to understand the differences between casual riders and annual members, why casual riders would purchase a membership, and how digital media can be utilized. They plan to analyze historical bike trip data to identify trends to aid their strategy development.
+
+
+
+
+### Ask Phase
+
+#### Business Task
+
+Three questions will guide the future marketing program:
+1. How do annual members and casual riders use Cyclistic bikes differently?
+2. Why would casual riders buy Cyclistic annual memberships?
+3. How can Cyclistic use digital media to influence casual riders to become members?
+
+
+
+#### Characters and Teams
+
+* Cyclistic
+* Lily Moreno - Director of Marketing
+* Cyclistic Marketing Analytics Team
+* Cyclistic Executive team
+
+
+
+
+### Prepare phase
+
+#### Setting up my environment
+
+```{r import_libraries, message=FALSE, warning=FALSE, results='hide'}
+library(tidyverse)
+library(janitor)
+library(data.table)
+library(hms)
+library(skimr)
+```
+
+
+
+### Importing data and storing them appropriately
+
+The working directory is set to the path where project files are located
+```{r change_dir_path, warning=FALSE, echo=FALSE}
+setwd("C:/Users/USER/Documents/Courses/Google_Data_Analytics/Cyclistic")
+dir_ <- "C:/Users/USER/Desktop/Capstone_Project/CSV_files/"
+basename(getwd())
+```
+
+
+Data is imported from the path, simplified sampling is done to allow quicker computations and knitting
+```{r import_data, warning=FALSE}
+trips_data <- list.files(path = dir_,
+                          pattern = "*tripdata.csv",
+                          full.names = T) %>% 
+  map_dfr(~ read_csv(., col_types = cols(.default = "c")) %>% 
+            sample_frac(0.1))
+```
+
+
+The imported data is skimmed to access its credibility
+```{r  skim_data, message=FALSE}
+trips_data %>%
+  sample_n(50000) %>% 
+  skim_without_charts()%>%
+  mutate(across(1:5, identity))
+```
+
+
+
+#### Identifying how the data is organised
+
+For the purposes of this case study, Cyclistic’s historical trip data for the previous 12 months (March 2022 to February 2023) will be used to analyze and identify trends. Download the previous 12 months of Cyclistic trip data [here](https://divvy-tripdata.s3.amazonaws.com/index.html). (Note: The datasets have a different name because Cyclistic is a fictional company.
+
+
+
+#### Using the ROCCC approach to determine the credibility of the data
+
+**Reliability**: Data contains accurate information but to ensure data privacy, the riders have not been personally identified. While each ride ID is unique, it cannot be determined whether the same casual riders live in the Cyclistic service area or if they have purchased multiple single passes. Also, there are missing values for the station and location information.
+**Originality** The data has been made available by
+Motivate International Inc. under this [license](https://www.divvybikes.com/data-license-agreement)
+**Comprehensive**: The data is comprehensive, it contains clear information about the ride and riders.
+**Current**:  The data is up to date and represents the current trends in ride usage.
+**Cited**: The source of the data is included which is Motivate International Inc.
+
+
+
+
+### Process Phase
+
+#### Transforming the data
+
+A ride_length column is created to conduct descriptive analysis
+
+```{r add_ride_length, results='hide', warning=FALSE, message=FALSE}
+trips <- trips_data %>% 
+  mutate(ended_at = as.POSIXct(ended_at)) %>% 
+  mutate(started_at = as.POSIXct(started_at)) %>%
+  mutate(ride_length = difftime(ended_at, started_at, units = "mins")) %>% 
+  mutate(ride_length = round(as.numeric(ride_length)))
+```
+
+
+
+#### Cleaning and checking the data for errors
+
+Remove bad and inconsistent data
+
+```{r clean_data_frame, results='hide', message=FALSE}
+trips_clean <- trips %>%
+  clean_names() %>%  #cleans column names with invalid R syntax
+  na.omit() %>% #removes rows with missing values
+  distinct() #removes duplicate rows
+trips_clean <- trips[trips$ride_length > 0 & trips$ride_length < 1440,] #removes ride_length values that are negative
+```
+
+
+The data frame is checked to ensure it is clean and consistent
+
+```{r glimpse, message=FALSE}
+glimpse(trips_clean)
+```
+
+
+
+### Analysis Phase
+
+#### Aggregate data so it’s useful and accessible
+
+A new data frame is created with only the columns that will be used for the analysis phase
+
+```{r select_columns, message=FALSE, results='hide'}
+trips_new <- select(trips_clean, "ride_length", "rideable_type", "started_at", "ended_at", "member_casual")
+```
+
+
+#### Data organising and formatting
+
+Columns are created for date formats and calculations
+
+```{r format_data_frame, message=FALSE, results='hide'}
+trips_new$date <- as.Date(trips_new$started_at) #creates a date column with yyyy-mm-dd default format
+trips_new$day_of_week <- format(as.Date(trips_new$date),"%A") #creates a day of the week column
+trips_new$day <- format(as.Date(trips_new$date), "%d") #creates a day column
+trips_new$month <- format(as.Date(trips_new$date), "%m") #creates a month column
+trips_new$year <- format(as.Date(trips_new$date), "%Y") #creates a year column
+```
+
+
+
+#### Performing Calculations
+
+Analysis for the data findings and insights is conducted
+
+**Total trips**
+```{r echo=FALSE, message=FALSE}
+trips_new %>%
+  summarise(number_of_rides = n())%>%
+  as_tibble()
+trips_new %>%
+  group_by(member_casual)%>%
+  summarise(number_of_rides = n())%>%
+  as_tibble()
+```
+
+**Average Ride length**
+```{r echo=FALSE, message=FALSE}
+trips_new %>%
+  summarise(average_ride_length = mean(ride_length))%>%
+  as_tibble()
+trips_new %>%
+  group_by(member_casual)%>%
+  summarise(average_ride_length = mean(ride_length))%>%
+  as_tibble()
+```
+
+**Average Ride Length by Weekday**
+```{r echo=FALSE, message=FALSE}
+trips_new %>%
+  group_by(day_of_week)%>%
+  summarise(average_ride_length = mean(ride_length))%>%
+  arrange(desc(average_ride_length)) %>% 
+  slice(1)
+trips_new %>%
+  group_by(member_casual, day_of_week)%>%
+  summarise(average_ride_length = mean(ride_length))%>%
+  arrange(desc(average_ride_length)) %>% 
+  slice(1)
+```
+
+**Most rides by weekday**
+```{r echo=FALSE, message=FALSE}
+trips_new %>%
+  group_by(day_of_week)%>%
+  summarise(number_of_rides = n())%>%
+  arrange(desc(number_of_rides)) %>% 
+  slice(1)
+trips_new %>%
+  group_by(member_casual, day_of_week)%>%
+  summarise(number_of_rides = n())%>%
+  arrange(desc(number_of_rides)) %>% 
+  slice(1)
+```
+
+**Most Rides by Month**
+```{r echo=FALSE, message=FALSE}
+trips_new %>%
+  group_by(month)%>%
+  summarise(number_of_rides = n())%>%
+  arrange(desc(number_of_rides)) %>% 
+  slice(1)
+trips_new %>%
+  group_by(member_casual, month)%>%
+  summarise(number_of_rides = n())%>%
+  arrange(desc(number_of_rides)) %>% 
+  slice(1)
+```
+
+**Most Rides by Bike Type**
+```{r echo=FALSE, message=FALSE}
+trips_new %>%
+  group_by(rideable_type)%>%
+  summarise(number_of_rides = n()) %>% 
+  arrange(desc(number_of_rides)) %>% 
+  slice(1)
+trips_new %>%
+  group_by(member_casual, rideable_type)%>%
+  summarise(number_of_rides = n()) %>% 
+  arrange(desc(number_of_rides)) %>% 
+  slice(1)
+
+```
+
+
+
+
+#### Identifying trends and relationships
+
+* **Total Rides :** 499,487        
+  + **Member:** 297,454	      
+  + **Casual:** 202,033
+  
+ 
+* **Average Ride Length:** 16 minutes  
+  + **Member:** 12 minutes  
+  + **Casual:** 22 minutes
+  
+ 
+* **Ride Length by Weekday:** Saturday
+  + **Member:** Saturday
+  + **Casual:** Sunday
+  
+
+* **Day of the week with most riders:** Saturday      
+  + **Member:** Thursday      
+  + **Casual:** Saturday
+  
+
+* **Month with most riders:** July       
+  + **Member:** August      
+  + **Casual:** July
+  
+
+* **Most Popular Bike:** Electric bike
+  + **Member:** Classic bike
+  + **Casual:** Electric bike
+  
+   
+ 
+
+### Share Phase
+
+#### Visualisation of the analysed data
+
+Using ggplot, the results are visualised as bar charts
+
+**Total Trips**
+
+```{r message=FALSE, echo=FALSE}
+trips_new %>%
+  group_by(member_casual)%>%
+  summarise(number_of_rides = n())%>%
+  ggplot(aes(x = member_casual, y = number_of_rides, fill = member_casual)) +
+  labs(title = "Total Trips By Customer Type", x = "Rider Type", y = "Total Rides", fill = "Rider Type") +
+  geom_col(width = 0.5, position = "dodge") +
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE))
+```  
+
+**Average Ride Length**
+
+```{r message=FALSE, echo=FALSE}
+trips_new %>%
+  group_by(member_casual)%>%
+  summarise(average_ride_length = mean(ride_length))%>%
+  ggplot(aes(x = member_casual, y = average_ride_length, fill = member_casual)) +
+  labs(title = "Average Ride Length", y = "Average Ride Length (minutes)", x = "Rider Type", fill = "Rider Type") +
+  geom_col(width = 0.5, position = "dodge")
+```  
+
+**Average Ride Length by Weekday**
+
+```{r message=FALSE, echo=FALSE}
+trips_new %>%
+  group_by(member_casual, day_of_week)%>%
+  summarise(average_ride_length = mean(ride_length))%>%
+  ggplot(aes(x = day_of_week, y = average_ride_length, fill = member_casual)) +
+  labs(title = "Average Ride Length by Weekday", x = "Day of the Week", y = "Average Ride Length (minutes)", fill = "Rider Type") +
+  geom_col(width = 0.5, position = "dodge") 
+```
+
+**Day of the Week with most Riders**
+
+```{r message=FALSE, echo=FALSE}
+trips_new %>%
+  group_by(member_casual, day_of_week)%>%
+  summarise(number_of_rides = n())%>%
+  arrange(member_casual, day_of_week)%>%
+  ggplot(aes(x = day_of_week, y = number_of_rides, fill = member_casual)) +
+  labs(title = "Total Rides by Day of the Week", x = "Day of the Week", y = "Total Rides", fill = "Rider Type" ) +
+  geom_col(width = 0.5, position = "dodge") +
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE))
+```  
+
+**Most Popular Bike**
+
+```{r message=FALSE, echo=FALSE}
+trips_new %>%
+  group_by(rideable_type, member_casual)%>%
+  summarise(number_of_trips = n())%>%
+  ggplot(aes(x = rideable_type, y = number_of_trips, fill = member_casual)) +
+  geom_bar(stat = 'identity') +
+  labs(title = "Total Rides by Bike Type", x = "Bike Type", y = "Total Trips", fill = "Rider Type") +
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE))
+```  
+
+
+
+#### Findings
+
+From the data analysis of the Cyclistic bike sharing company 12 months historical trip data, several findings came to light:
+
+* The total number of rides in the given period is 5,828,546, out of which 3,463,689 (59.4%) are taken by members and 2,364,857 (40.6%) are taken by casual riders. This indicates that the majority of the rides are taken by members, which could be an essential factor in the company's revenue and growth.
+
+* The average ride length for all riders is 19 minutes, with members averaging 14 minutes and casual riders averaging 30 minutes. This shows that casual riders tend to take longer rides than members, which could mean they are more interested in exploring the city or using the bikes for leisure activities, whereas members may be using the bikes for commuting or shorter trips.
+
+* The day of the week with the most riders is Saturday, with casual riders having a slightly higher number of rides on this day than members. Thursdays are the most popular day for members. This trend may indicate that members use the bikes more frequently for commuting to work during weekdays, while casual riders use them more often on weekends for recreational purposes.
+
+* The month with the most riders is August. Casual and member riders tend to ride more from May to August. This could be due to the summer season, which is an excellent time for outdoor activities and exploring the city.
+
+* The most popular type of bike is an electric bike, which is used by both members and casual riders, but members prefer casual bikes more than electric bikes. This trend may indicate that casual riders are more interested in trying out new and innovative features, while members prefer more practical and familiar options.
+
+* When it comes to ride length by weekday, Sunday is the day with the longest rides. By rider type, it is Saturday for members and Sunday for casual riders. This trend could indicate that riders are using the bikes more extensively on weekends, especially on Sundays, for long trips or exploring the city's outskirts. However, Casual riders have longer rides on all days of the week compared to members.
+
+
+
+
+### Act Phase
+
+#### Data Insights
+
+As per the data analysis of Cyclistic's ridership, there are significant differences between the usage patterns of casual riders and annual members. Some of the insights that can help in designing a new marketing strategy to convert casual riders into annual members are:
+
+1. Member riders tend to take shorter rides on average than casual riders. The average ride length for member riders is 14 minutes, while for casual riders, it is 30 minutes. This suggests that casual riders may be more inclined to use the bikes for leisurely purposes such as sightseeing, while member riders may use them more for transportation.
+
+2. Member riders use the service more frequently than casual riders. The total number of rides by member riders is 3,463,689, while for casual riders, it is 2,364,857. This suggests that annual members may find the service more useful for their daily commute or regular transportation needs.
+
+3. Member riders tend to ride more during weekdays than weekends, while casual riders tend to ride more during weekends. This suggests that casual riders may be using the service more for leisurely purposes on weekends, while annual members may be using it more for their daily commute during weekdays.
+
+4. The month with the most riders is July, which coincides with the summer months. This suggests that there may be an opportunity to target casual riders during the summer months when they are more likely to be out and about.
+
+
+
+
+### Recommendations
+
+Based on the analysis, the following marketing strategies could be implemented to convert casual riders into annual members:
+
+**Free Trial**: Offer a free trial for casual riders to experience the benefits of an annual membership, such as discounted rates and unlimited rides. This can be done through targeted email campaigns or social media advertising.
+
+**Referral Program**: Create a referral program that rewards annual members for referring casual riders to sign up for an annual membership. This can be done through a discount.
+
+**Seasonal Promotions**: Create seasonal promotions that encourage casual riders to sign up for an annual membership during peak riding seasons. Highlight the benefits of having access to the service all year round through an annual membership during the spring and summer months when more people are likely to ride bikes.
+
+
+
+To apply these insights, the marketing team could create targeted Google and social media ads promoting the benefits of annual membership. The team could also collaborate with local businesses and events to offer discounted annual memberships to attendees or customers. Finally,partner with influencers and bloggers to showcase the benefits of annual membership and offer exclusive promotions to their followers.
+
+The next steps would be to track the success of these strategies and analyze the data to see if there is an increase in the number of annual memberships. The team could also conduct user surveys to gain additional insights into why casual riders may not want to sign up for an annual membership.
+
+
+
+
+#### Additional data that could expand findings
+
+Additional data that could be used to expand on these findings includes demographic data on the riders, such as age, gender, and income. This information could be used to create targeted marketing campaigns aimed at specific demographic groups. The team could also analyze data on the most popular bike routes to identify areas where more bike stations or infrastructure may be needed to attract more riders.
